@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<title>Specification generator</title>
+<style>
+	body {font-family: Consolas, Sans-Serif}
+	textarea {width: 100%; height: 300px; white-space: nowrap; font-family: Consolas; color:blue;}
+	table {width:100%; height:100%}
+	td {vertical-align: top;width: 50%;}
+	button {padding: 5px 10px}
+	pre a {color: grey}
+</style>
+<table>
+    <tr>
+        <td>
+            <h3>Insert entity class here:</h3>
+            <div><textarea id="code"></textarea></div>
+            <div><button id="run">Run</button></div>
+        </td>
+
+        <td>
+            <h3>Your specification will be there:</h3>
+            <div><textarea id="codeResult"></textarea></div>
+            <div><button id="copy">Copy</button><dialog>Copied!</dialog></div>
+        </td>
+    </tr>
+</table>
+
+<pre style='text-align: right'><a href="https://github.com/sidkoalex/jpa-specification-generator">github.com/sidkoalex/jpa-specification-generator</a></pre>
+
+<script>
+    "use strict"
+
+    const buttonRun = document.querySelector("#run");
+    const buttonCopy = document.querySelector("#copy");
+    const classCodeElement = document.querySelector("#code");
+    const resultCodeElement = document.querySelector("#codeResult");
+	const copyDialogElement = document.querySelector("dialog");
+
+    const getEntityCode = () => classCodeElement.value
+    const setGeneratedCode = (code) => resultCodeElement.value = code;
+
+    const classNameRegex = /^.*class\s(\w+).*{\s?$/gm
+    const classFieldRegex = /(private|public|protected)\s\w+\s(\w+);\n/gm;
+
+    buttonRun.onclick = () => makeCriteriaMain(classNameRegex, classFieldRegex, getEntityCode, setGeneratedCode);
+    buttonCopy.onclick = () => copyText(resultCodeElement, copyDialogElement);
+
+    function makeCriteriaMain(classNameRegex, classFieldRegex, getClassCodeFunc, setGeneratedCodeFunc) {
+        let classCode = getClassCodeFunc();
+        let className = parseRegexForGroup(1, classNameRegex, classCode);
+        let variables = parseRegexForGroup(2, classFieldRegex, classCode);
+
+        console.log(`Generate code for class name ${className} and variables:\n${variables}`);
+
+        let generatedCode = buildCriteriaCode(className, variables);
+        setGeneratedCodeFunc(generatedCode);
+    }
+
+    function copyText(field, copyDialogElement) {
+        field.select();
+        document.execCommand("copy");
+		copyDialogElement.show();
+		setTimeout(()=>copyDialogElement.close(), 500);
+    }
+
+    function buildCriteriaCode(className, variables) {
+        let code = "";
+		code += `public Specification<${className}> createSpecification(${className}Criteria criteria) {\n`;
+		code += `\tSpecification<${className}> specification = Specification.where(null);\n`;
+        code += "\tif (criteria != null) {\n";
+        variables.forEach(v => {
+            code += `\t\tif (criteria.${getter(v)} != null)\n` +
+                `\t\t\tspecification = specification.and(buildSpecification(criteria.${getter(v)}, ${className}_.${v}));\n`;
+        });
+        code += "\t}\n";
+		code += "\treturn specification;\n";
+		code += "}";
+        return code;
+    }
+
+    function parseRegexForGroup(groupIndex, regex, str) {
+        let m;
+        let result = [];
+        while ((m = regex.exec(str)) !== null) {
+            // This is necessary to avoid infinite loops with zero-width matches
+            if (m.index === regex.lastIndex) {
+                regex.lastIndex++;
+            }
+
+            // The result can be accessed through the `m`-variable.
+            m.forEach((match, matchGroupIndex) => {
+                if (matchGroupIndex == groupIndex)
+                    result.push(match);
+            });
+        }
+        return result;
+    }
+
+    function camelize(str) {
+        return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function(letter, index) {
+            return letter.toUpperCase();
+        }).replace(/\s+/g, '');
+    }
+
+    function getter(str) {
+        return "get" + camelize(str) + "()";
+    }
+</script>
